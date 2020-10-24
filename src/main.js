@@ -4,7 +4,9 @@ import router from "./router";
 
 Vue.config.productionTip = false;
 
-new Vue({
+Vue.prototype.a = "123"
+
+var vm = new Vue({
   router,
   render: h => h(App)
 }).$mount("#app");
