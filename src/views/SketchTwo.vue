@@ -15,6 +15,15 @@
   //  This is set because we're going to need to access the Vue global
   //  properties from within the p5 script.  Feels wrong though?
   var vm;
+  var hostname
+  switch (process.env.NODE_ENV) {
+    case ('development'):
+      hostname = "http://localhost:8080"
+      break;
+    case ("production"):
+      hostname = "https://01014.org/"
+      break;
+  }
   export default {
     name: "SketchTwo",
     data() {
@@ -47,8 +56,7 @@
           Events = Matter.Events,
           Common = Matter.Common
         const mw = new vm.$mw(Matter, p5)
-
-        //  P R E  S E T U P 
+        //  Here, have some global variables
         var ground,
           goat,
           cliff,
@@ -59,8 +67,6 @@
           kickerBoot,
           kickerCon,
           kickerPin,
-          mouse,
-          mConstraint,
           showBox = true,
           splodeArray = [],
           goatImg,
@@ -69,92 +75,91 @@
           hit2,
           splat,
           kickerGo,
-          goatSounds = []
+          goatSounds = [],
+          goatJson = '',
+          goatParts = [],
+          goatPartsImgs = [],
+          blissHill = ''
 
 
-        //  These are some utility functions for getting random 
-        //  attributes.  These could technically be put made part of 
-        //  the mw package.  I may do that later when I am less lazy.
+
+        ///////////////////////////////////////
+        //  These are some utility functions.//
+        ///////////////////////////////////////
         const randomWidth = () => p5.random(0, p5.width - 50);
         const randomHeight = () => p5.random(0, p5.height - 50);
         const randomDiameter = () => p5.random(0, 50);
         const ranNum = (num) => Math.floor(p5.random(0, num));
         const scaledWidth = () => document.getElementById("p5canvasHolder").getBoundingClientRect().width
         const scaledHeight = () => document.getElementById("p5canvasHolder").getBoundingClientRect().height
-        //  Utility function for finding the width of a matter.js rect
-        function rectW(matterRect) {
-          return p5.dist(matterRect.vertices[0].x, matterRect.vertices[0].y, matterRect.vertices[1].x, matterRect.vertices[1].y)
-        }
-        //  Utility function for finding the height of a matter.js rect
-        function rectH(matterRect) {
-          return p5.dist(matterRect.vertices[0].x, matterRect.vertices[0].y, matterRect.vertices[3].x, matterRect.vertices[3].y)
+
+        function ranVec(forceMag) {
+          return (Math.random() * forceMag) * Common.choose([1, -1])
         }
 
 
-
-        // Show function
+        ///////////////////
+        // Show function///
+        ///////////////////
         const show = () => {
-          p5.rectMode(p5.CENTER);
-          p5.ellipseMode(p5.RADIUS)
-          p5.imageMode(p5.CENTER)
-          //  Goat
-          if (showBox) {
-            goat.show(goatImg)
-          }
-          
-          kicker.show()
-          //  Kicker rod
-//          p5.push();
-//          p5.translate(kicker.parts[1].position.x, kicker.parts[1].position.y);
-//          p5.rotate(kicker.angle)
-//          p5.rect(0, 0, rectW(kicker.parts[1]), rectH(kicker.parts[1]))
-//          p5.pop();
-//          //  Kicker boot
-//          p5.push()
-//          p5.translate(kicker.parts[2].position.x, kicker.parts[2].position.y)
-//          p5.rotate(kicker.angle)
-//          p5.rect(0, 0, rectW(kicker.parts[2]), rectH(kicker.parts[2]))
-//          p5.pop()
           //  Kicker pin (debug only)
-          p5.circle(kickerPin.position.x, kickerPin.position.y, kickerPin.circleRadius)
+          // p5.circle(kickerPin.position.x, kickerPin.position.y, kickerPin.circleRadius)
           //  Gibbs
-          p5.push()
-          p5.fill("red")
-          p5.stroke("red")
           if (splodeArray.length) {
-            splodeArray.forEach((gibbs) => {
-              gibbs.bodies.forEach((gibb) => {
-                p5.circle(gibb.position.x, gibb.position.y, gibb.circleRadius)
-              });
-              gibbs.constraints.forEach((gibbCon) => {
-                p5.line(gibbCon.bodyA.position.x, gibbCon.bodyA.position.y, gibbCon.bodyB.position.x, gibbCon.bodyB.position.y)
-              })
+            p5.push()
+            p5.fill("red")
+            p5.stroke("red")
+            splodeArray.forEach((gibb) => {
+              gibb.show()
+            })
+            p5.pop()
+          }
+          //  Goat Parts
+          if (goatParts.length) {
+            goatParts.forEach((goatPart) => {
+              var options = {
+                scale: {
+                  x: .2
+                }
+              }
+              switch (goatPart.shape) {
+                case ("rectangle"):
+                  goatPart.body.show(goatPart.img, options)
+                  break;
+                case ("circle"):
+                  goatPart.body.show(goatPart.img, options)
+                  break;
+              }
             })
           }
-          p5.pop()
-          //  Walls
-
-
+          //  Goat
+          if (showBox) {
+            goat.show(goatImg, {
+              width: goat.width(),
+              height: goat.height()
+            })
+          }
+          //  Walls (for debug)
+//          p5.push()
+//          p5.noStroke()
+//          var wallOptions = {
+//            colors: {
+//              fill: "red"
+//            }
+//          }
+//          ground.show()
+//          wallL.show()
+//          wallR.show()
+//          p5.pop()
+          //  Kicker / cliff
+          kicker.show()
           cliff.show()
-
-          p5.push()
-          p5.noStroke()
-          ground.show(null, {
-            fill: "red"
-          })
-          wallL.show(null, {
-            fill: "red"
-          })
-          wallR.show(null, {
-            fill: "red"
-          })
-          p5.pop()
         }
 
-
-
-        //  P R E L O A D 
-        p5.preload = () => {
+        ////////////////////
+        //  P R E L O A D // 
+        ////////////////////
+        p5.preload = async () => {
           console.log("p5.preload() ran")
           //  This has to be changed to whatever the public directory is
           //          goatImg = p5.loadImage('https://01014.org/sketchbook/transparent-goat.png')
@@ -167,89 +172,81 @@
           //          splat = new Sound('https://01014.org/sketchbook/splat.wav')
 
           //  This is for dev.  For production use the above commented code
-          goatImg = p5.loadImage('http://localhost:8080/transparent-goat.png')
+          goatImg = p5.loadImage(`${hostname}/transparent-goat.png`)
+          blissHill = p5.loadImage(`${hostname}/background/bliss-hill.jpg`)
           for (var i = 0; i < 16; i++) {
-            var newSound = mw.sound('http://localhost:8080/goat' + (i + 1) + '.mp3')
+            var newSound = mw.sound(`${hostname}/sounds/goat${i + 1}.mp3`)
             goatSounds.push(newSound)
             vm.allSounds.push(newSound)
           }
-          hit1 = mw.sound('http://localhost:8080/hit1.wav')
-          hit2 = mw.sound('http://localhost:8080/hit2.wav')
-          kickerGo = mw.sound('http://localhost:8080/kickerGo.wav')
-          splat = mw.sound('http://localhost:8080/splat.wav')
+          hit1 = mw.sound(`${hostname}/sounds/hit1.wav`)
+          hit2 = mw.sound(`${hostname}/sounds/hit2.wav`)
+          kickerGo = mw.sound(`${hostname}/sounds/kickerGo.wav`)
+          splat = mw.sound(`${hostname}/sounds/splat.wav`)
           vm.allSounds.push(hit1, hit2, kickerGo, splat)
+
+          const res = await fetch(`${hostname}/goat-part-dimensions.json`)
+          goatJson = await res.json()
+          //  This is literally just because I'm too lazy to type this in
+          //  ...and also because hostname changes, I guess...
+          Object.keys(goatJson).forEach((key) => {
+            goatJson[key].img = p5.loadImage(`${hostname}/goat-parts/${key}.png`)
+          })
         }
 
-
-        // S E T U P 
+        ///////////////
+        // S E T U P //
+        ///////////////
         p5.setup = () => {
           console.log("p5.setup has been called")
           //  Setup the canvas
-          var canvas = p5.createCanvas(document.getElementById("p5canvasHolder").getBoundingClientRect().width, document.getElementById("p5canvasHolder").getBoundingClientRect().height);
+          var canvas = p5.createCanvas(scaledWidth(), scaledHeight());
           canvas.parent("p5canvasHolder");
           canvas.id("p5canvas")
           p5.pixelDensity(p5.displayDensity())
-
+          p5.rectMode(p5.CENTER);
+          p5.ellipseMode(p5.RADIUS)
+          p5.imageMode(p5.CENTER)
+          //  Make the engine
           vm.engine = Engine.create({
-            positionIterations: 10,
-            velocityIterations: 6,
-            constraintIterations: 3
+            positionIterations: 8,
+            velocityIterations: 4,
+            constraintIterations: 2
           });
+          //  Make the world
           vm.world = vm.engine.world
-
-
-          //  Left Wall
-          wallL = mw.rectangle(10, p5.canvas.height / 2, 20, p5.canvas.height, {
+          //  Create all the bodies
+          wallL = mw.rectangle(-10, p5.canvas.height / 2, 20, p5.canvas.height, {
             isStatic: true
           });
-          wallL.add(vm.world)
-          //  Right wall
-          wallR = mw.rectangle(p5.canvas.width - 10, p5.canvas.height / 2, 20, p5.canvas.height, {
+          wallR = mw.rectangle(p5.canvas.width + 10, p5.canvas.height / 2, 20, p5.canvas.height, {
             isStatic: true
           })
-          wallR.add(vm.world)
-          //  Ground
-          ground = mw.rectangle(p5.canvas.width / 2, p5.canvas.height - 5, p5.canvas.width, 20, {
+          ground = mw.rectangle(p5.canvas.width / 2, p5.canvas.height + 10, p5.canvas.width, 20, {
             isStatic: true,
             friction: 1
           })
-          ground.add(vm.world)
-          //  Cliff
           cliff = mw.rectangle(250, 350, 500, 25, {
             isStatic: true
           })
-          cliff.add(vm.world)
-          //  Goat
           goat = new mw.rectangle(400, 300, 50, 50, {
             density: Math.random() * .0006
           })
-          goat.add(vm.world)
-
-
-
-          //  Kicker rod
-          kickerRod = Bodies.rectangle(350, 100, 30, 220, {
+          kickerRod = mw.rectangle(350, 100, 30, 220, {
             label: 'kickerRod'
           });
-          //  Kicker boot
-          kickerBoot = Bodies.rectangle(360, 225, 50, 30, {
+          kickerBoot = mw.rectangle(360, 225, 50, 30, {
             label: 'kickerBoot'
           });
-          //  Kicker composite body
-          
-          kicker = mw.compositeBody({parts: [kickerRod, kickerBoot]})
-          kicker.add(vm.world)
-          
-//          kicker = Body.create({
-//            parts: [kickerRod, kickerBoot]
-//          })
-          //  Kicker constraint
+          kicker = mw.compositeBody({
+            parts: [kickerRod, kickerBoot]
+          })
           kickerCon = Constraint.create({
             pointA: {
-              x: kicker.position.x,
-              y: kicker.position.y - 20
+              x: kicker.body.position.x,
+              y: kicker.body.position.y - 20
             },
-            bodyB: kicker,
+            bodyB: kicker.body,
             pointB: {
               x: 0,
               y: -90
@@ -257,43 +254,44 @@
             stiffness: .2,
             length: 0
           })
-          //  Kicker pin
           kickerPin = Bodies.circle(190, 55, 8, {
             isStatic: true
           })
-
-
-          //  Mouse
-          mouse = Mouse.create(canvas.elt)
-          mConstraint = MouseConstraint.create(vm.engine, {
+          var mouse = Mouse.create(canvas.elt)
+          var mConstraint = MouseConstraint.create(vm.engine, {
             mouse: mouse,
             constraint: {
               stiffness: 1
             }
           })
           mouse.pixelRatio = p5.displayDensity()
-
-
           //  Position the kicker
-          Body.setAngle(kicker, 2)
-          Body.setPosition(kicker, {
+          Body.setAngle(kicker.body, 2)
+          Body.setPosition(kicker.body, {
             x: 277,
             y: 57
           })
-          Body.setVelocity(kicker, {
+          Body.setVelocity(kicker.body, {
             x: 0,
             y: 0
           })
-          Body.setAngularVelocity(kicker, 0)
+          Body.setAngularVelocity(kicker.body, 0)
           //  Add everything to the world
+          wallL.add(vm.world)
+          wallR.add(vm.world)
+          ground.add(vm.world)
+          cliff.add(vm.world)
+          goat.add(vm.world)
+          kicker.add(vm.world)
           World.add(vm.world, [mConstraint, kickerPin, kickerCon]);
 
-          //  Make sure everything is scaled according to the device scale.  Pretty sure that the DISTANCES between objects should be scaled as well.  So.  That'll be fun to add in.
+          /*  Make sure everything is scaled according to the device scale.  
+              Pretty sure that the DISTANCES between objects should be scaled 
+              as well.  So.  That'll be fun to add in.                   */
           Composite.scale(vm.world, 1 / p5.displayDensity(), 1 / p5.displayDensity(), {
             x: 0,
             y: 0
           }, true)
-
 
 
           //  On Resize
@@ -302,21 +300,21 @@
             //  Update ground in case of resize
             Body.setPosition(ground.body, {
               x: p5.width / 2,
-              y: p5.height - rectH(ground.body) / 2
+              y: (p5.height + ground.height() / 2)
             })
-            Body.scale(ground.body, (p5.width / rectW(ground.body)), 1)
+            Body.scale(ground.body, (p5.width / ground.width()), 1)
             //  Update left wall in case of resize
             Body.setPosition(wallL.body, {
-              x: rectW(wallL.body) / 2,
+              x: (wallL.width() / 2) - 10,
               y: p5.height / 2
             })
-            Body.scale(wallL.body, 1, (p5.height / rectH(wallL.body)))
+            Body.scale(wallL.body, 1, (p5.height / wallL.height()))
             //  Update right wall in case of resize
             Body.setPosition(wallR.body, {
-              x: p5.width - rectW(wallR.body) / 2,
+              x: (p5.width + wallR.width() / 2),
               y: p5.height / 2
             })
-            Body.scale(wallR.body, 1, p5.height / rectH(wallR.body))
+            Body.scale(wallR.body, 1, p5.height / wallR.height())
           }
 
 
@@ -329,10 +327,25 @@
           //  Collision events
           Events.on(vm.engine, "collisionStart", function(event) {
             event.pairs.forEach((pair) => {
+              var pairs = [pair.bodyA, pair.bodyB]
+
+              //  On collision between the kicker and the goat
+              if (pairs.includes(goat.body) && pairs.includes(kicker.body.parts[2])) {
+                //  Pick a hit sound to play
+                Common.choose([hit1, hit2]).play()
+                try {
+                  //  pick a random goat sound
+                  goatSounds[Math.floor(Math.random() * goatSounds.length)].play()
+                } catch (e) {
+                  console.log(e)
+                }
+              }
+
               //  On collision with goat and wallR or ground
-              //  THIS CAN BE REWRITTEN FOR SURE
-              if ((pair.bodyA == goat.body && pair.bodyB == wallR.body) || (pair.bodyA == wallR.body && pair.bodyB == goat.body) || (pair.bodyA == goat.body && pair.bodyB == ground.body) || (pair.bodyA == ground.body && pair.bodyB == goat.body)) {
-                //  Remove goat
+              if (pairs.includes(goat.body) && pairs.includes(wallR.body) || pairs.includes(goat.body) && pairs.includes(ground.body)) {
+                var goatPosX = goat.body.position.x
+                var goatPosY = goat.body.position.y
+                //  Remove goat from world
                 World.remove(vm.world, goat.body, true)
                 //  Stop rendering goat
                 showBox = false
@@ -348,31 +361,42 @@
                 }
                 //  Constraint options
                 var constOptions = {
-                  stiffness: 0.2
+                  stiffness: 1
                 }
                 //  Make gibbs
                 for (var i = 0; i < 5; i++) {
-                  splodeArray.push(Composites.softBody(goat.body.position.x, goat.body.position.y, ranNum(3) + 1, ranNum(3) + 1, 0, 0, false, 4, partOptions, constOptions))
-                  World.add(vm.world, splodeArray[i])
-                }
-                //  Apply random force to gibbs so they "explode" outwards
-                splodeArray.forEach((gibb) => {
-                  var forceMag = gibb.bodies[0].mass * .4
-                  Body.applyForce(gibb.bodies[0], gibb.bodies[0].position, {
-                    x: (Math.random() * forceMag) * Common.choose([1, -1]),
-                    y: (Math.random() * forceMag) * Common.choose([1, -1])
+                  splodeArray.push(mw.softBody(goatPosX + ranVec(5), goatPosY + ranVec(5), ranNum(3) + 1, ranNum(3) + 1, 0, 0, false, 2, partOptions, constOptions))
+                  splodeArray[i].add(vm.world)
+                  var splodeBody = splodeArray[i].body.bodies[0]
+                  var forceMag = splodeBody.mass * .4
+                  Body.applyForce(splodeBody, splodeBody.position, {
+                    x: ranVec(forceMag),
+                    y: ranVec(forceMag)
                   })
-                })
-              }
-              //  On collision between the kicker and the goat
-              if ((pair.bodyA == goat.body && pair.bodyB == kicker.parts[2]) || (pair.bodyA == kicker.parts[2] && pair.bodyB == goat.body)) {
-                //  Pick a hit sound to play
-                Common.choose([hit1, hit2]).play()
-                try {
-                  //  pick a random goat sound
-                  goatSounds[Math.floor(Math.random() * goatSounds.length)].play()
-                } catch (e) {
-                  console.log(e)
+                }
+                //  Make goat parts
+                for (let i = 0; i < 7; i++) {
+                  var ranGoatPart = goatJson[Common.choose(Object.keys(goatJson))]
+                  switch (ranGoatPart.shape) {
+                    case ("rectangle"):
+                      ranGoatPart.body = mw.rectangle(goatPosX + ranVec(5), goatPosY + ranVec(5), ranGoatPart.w, ranGoatPart.h)
+                      Body.scale(ranGoatPart.body.body, .2, .2)
+                      ranGoatPart.body.add(vm.world, ranGoatPart.body.body)
+                      goatParts.push(ranGoatPart)
+                      break;
+                    case ("circle"):
+                      ranGoatPart.body = mw.circle(goatPosX + ranVec(5), goatPosY + ranVec(5), ranGoatPart.radius)
+                      Body.scale(ranGoatPart.body.body, .2, .2)
+                      ranGoatPart.body.add(vm.world, ranGoatPart.body.body)
+                      goatParts.push(ranGoatPart)
+                      break;
+                  }
+                  //  Apply a random force to the body parts so they explode outwards
+                  var forceMag = ranGoatPart.body.body.mass * .1
+                  Body.applyForce(ranGoatPart.body.body, ranGoatPart.body.body.position, {
+                    x: ranVec(forceMag),
+                    y: ranVec(forceMag)
+                  })
                 }
               }
             })
@@ -388,7 +412,7 @@
               //  Take out the kicker pin
               World.remove(vm.world, kickerPin, true);
               //  Apply a force to the kicker so it actually kicks decently
-              Body.applyForce(kicker, Vector.sub(kicker.position, {
+              Body.applyForce(kicker.body, Vector.sub(kicker.body.position, {
                 x: 0,
                 y: -25
               }), {
@@ -402,19 +426,18 @@
                 World.add(vm.world, kickerPin)
               }
               //  Reset the kickerRod
-              Body.setPosition(kicker, {
+              Body.setPosition(kicker.body, {
                 x: 277,
                 y: 57
               })
-              Body.setAngle(kicker, 2)
-              Body.setAngle(kicker, 2)
-              Body.setVelocity(kicker, {
+              Body.setAngle(kicker.body, 2)
+              Body.setAngle(kicker.body, 2)
+              Body.setVelocity(kicker.body, {
                 x: 0,
                 y: 0
               })
-              Body.setAngularVelocity(kicker, 0)
-
-              //  Reset the box
+              Body.setAngularVelocity(kicker.body, 0)
+              //  Reset the goat
               if (!Composite.get(vm.world, goat.body.id, goat.body.type)) {
                 World.add(vm.world, goat.body)
                 showBox = true
@@ -429,11 +452,17 @@
                 y: 0
               })
               Body.setAngularVelocity(goat.body, 0)
+              //  Remove gibbs
               splodeArray.forEach((gibb) => {
-                World.remove(vm.world, Composite.allBodies(gibb), true)
-                World.remove(vm.world, gibb, true)
+                World.remove(vm.world, Composite.allBodies(gibb.body), true)
+                World.remove(vm.world, gibb.body, true)
               })
               splodeArray = []
+              //  Remove goat parts
+              goatParts.forEach((part) => {
+                World.remove(vm.world, part.body.body, true)
+              })
+              goatParts = []
             }
           }
         };
@@ -446,24 +475,25 @@
             console.log(e)
           }
         }
-
-        // D R A W 
+        /////////////
+        // D R A W //
+        /////////////
         p5.draw = () => {
-          p5.background(0);
+          p5.background(0)
+          p5.image(blissHill, p5.canvas.width/2, p5.canvas.height/2, p5.canvas.width, p5.canvas.height)
           p5.fill("white");
           p5.stroke("black");
-          //  Update physics with matter.js, render everything with p5.js01014.
           update()
           show();
         };
       }
     },
+
     mounted() {
       console.log("Mounted has been called")
       //  Start the show
       vm.p5 = new vm.$P5(vm.script);
     },
-
 
     // clean house
     beforeDestroy() {
@@ -471,8 +501,6 @@
       for (var i = 0; i < vm.allSounds.length; i++) {
         vm.allSounds = vm.allSounds.splice(i, 0);
       }
-      //  Just being reeaallly careful here.
-      //  Destroy evvveeryyytthhhiinngg!
       vm.engine.events = {}
       vm.$Matter.World.clear(vm.world, false)
       vm.$Matter.Engine.clear(vm.engine)
