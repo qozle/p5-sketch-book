@@ -2,8 +2,6 @@
 
 This is a sketchbook of all my p5.js sketches and projects, installed into a vue-cli environment.  
 
-You can find the live version at https://01014.org/sketchbook.
-
 I'm actually a little proud of this sketchbook app.  I've learned a lot while making it- I've come to understand importing packages with Vue a lot better (namely, how to import matter-js and p5.js a single time, globally).  I've also learned how to use both of these packages a lot better.  
 
 This package uses a global matter-js instance and clears it for every sketch, and uses p5 in instance mode and clears / creates a new instance for every sketch.  
